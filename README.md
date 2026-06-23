@@ -16,7 +16,6 @@ This repository records the R analysis scripts used for a CCND1-centered pCR ver
 - `scripts/06_scRNAseq_AnalysisscRNA_Cell_Annotation.txt`: Marker-based cell type annotation.
 - `scripts/06_scRNAseq_AnalysisscRNA_inferCNV.txt`: inferCNV-based malignant epithelial cell classification.
 - `scripts/06_scRNAseq_AnalysisCCND1_Correlation_Analysis.txt`: CCND1 expression and correlation analysis in malignant epithelial cells.
-- `archive/original-code.zip`: Original code archive supplied before repository organization.
 
 ## Reproducibility Notes
 
