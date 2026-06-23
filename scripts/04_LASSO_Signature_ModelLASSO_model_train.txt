@@ -1,0 +1,142 @@
+# Install & load packages
+if (!require("glmnet")) install.packages("glmnet")
+if (!require("pROC")) install.packages("pROC")
+library(glmnet)
+library(pROC)
+library(RColorBrewer)
+
+# Load prepared LASSO dataset
+data <- read.csv("GSE25066-LASSO1.csv", header = TRUE, check.names = FALSE)
+
+# Binary response variable: NonpCR = 1, pCR = 0
+y <- as.numeric(trimws(data[, 2]) == "NonpCR")
+if (length(unique(y)) < 2) {
+  stop("Response variable must contain both pCR and NonpCR groups")
+}
+# Feature matrix
+x <- as.matrix(data[, 3:ncol(data)])
+
+# Check missing value
+if (any(is.na(x)) || any(is.na(y))) {
+  stop("Dataset contains NA values, clean data before training")
+}
+
+# Fix random seed for reproducibility
+set.seed(123)
+
+# 10-fold cross validation LASSO binomial regression
+cv_fit <- cv.glmnet(
+  x = x,
+  y = y,
+  family = "binomial",
+  alpha = 1,
+  nfolds = 10,
+  type.measure = "auc"
+)
+
+# Calculate risk score for all samples
+risk_scores <- predict(cv_fit, newx = x, s = "lambda.min", type = "response")
+risk_scores_vector <- as.vector(risk_scores)
+
+# Extract genes with non-zero regression coefficients
+selected_genes <- coef(cv_fit, s = "lambda.min")[which(coef(cv_fit, s = "lambda.min") != 0),]
+selected_genes <- selected_genes[-1] # Remove intercept
+selected_gene_names <- names(selected_genes)
+
+# Combine sample info, risk score and signature gene expression
+data_with_risk <- cbind(
+  data[, 1:2],
+  RiskScore = risk_scores_vector,
+  data[, selected_gene_names, drop = FALSE]
+)
+write.csv(data_with_risk, "GSE25066-LASSO2.csv", row.names = FALSE)
+
+palette <- brewer.pal(9, "Set1")
+par(mar = c(5, 5, 4, 2) + 0.1, cex.lab = 1.2, cex.axis = 1, family = "sans")
+
+# Cross validation AUC curve
+pdf("LASSO_CV_AUC.pdf", width = 8, height = 8)
+plot(cv_fit, main = "", col = palette[2], xlab = expression(log(lambda)), ylab = "AUC (10-fold Cross Validation)")
+abline(v = log(cv_fit$lambda.min), col = palette[1], lty = 2, lwd = 2)
+abline(v = log(cv_fit$lambda.1se), col = palette[3], lty = 3, lwd = 2)
+legend("topright", legend = c("Optimal lambda (max AUC)", "1-SE lambda"), col = palette[c(1,3)], lty = c(2,3), lwd = 2, cex = 0.9, bty = "n")
+dev.off()
+tiff("LASSO_CV_AUC.tif", width = 8, height = 8, units = "in", res = 300, compression = "lzw")
+plot(cv_fit, main = "", col = palette[2], xlab = expression(log(lambda)), ylab = "AUC (10-fold Cross Validation)")
+abline(v = log(cv_fit$lambda.min), col = palette[1], lty = 2, lwd = 2)
+abline(v = log(cv_fit$lambda.1se), col = palette[3], lty = 3, lwd = 2)
+legend("topright", legend = c("Optimal lambda (max AUC)", "1-SE lambda"), col = palette[c(1,3)], lty = c(2,3), lwd = 2, cex = 0.9, bty = "n")
+dev.off()
+
+# Coefficient path plot
+pdf("LASSO_Coefficient_Path.pdf", width = 8, height = 8)
+plot(cv_fit$glmnet.fit, xvar = "lambda", main = "", col = colorRampPalette(c("steelblue", "firebrick"))(20), xlab = expression(log(lambda)), ylab = "Regression Coefficient Value")
+abline(v = log(cv_fit$lambda.min), col = palette[1], lty = 2, lwd = 2)
+abline(v = log(cv_fit$lambda.1se), col = palette[3], lty = 3, lwd = 2)
+legend("topright", legend = c("Optimal lambda", "1-SE lambda"), col = palette[c(1,3)], lty = c(2,3), lwd = 2, cex = 0.9, bty = "n")
+dev.off()
+tiff("LASSO_Coefficient_Path.tif", width = 8, height = 8, units = "in", res = 300, compression = "lzw")
+plot(cv_fit$glmnet.fit, xvar = "lambda", main = "", col = colorRampPalette(c("steelblue", "firebrick"))(20), xlab = expression(log(lambda)), ylab = "Regression Coefficient Value")
+abline(v = log(cv_fit$lambda.min), col = palette[1], lty = 2, lwd = 2)
+abline(v = log(cv_fit$lambda.1se), col = palette[3], lty = 3, lwd = 2)
+legend("topright", legend = c("Optimal lambda", "1-SE lambda"), col = palette[c(1,3)], lty = c(2,3), lwd = 2, cex = 0.9, bty = "n")
+dev.off()
+
+# ROC curve of training cohort
+roc_obj <- roc(y, risk_scores_vector)
+pdf("LASSO_ROC.pdf", width = 8, height = 8)
+plot(roc_obj, main = "ROC Curve of LASSO Risk Signature", col = palette[4], lwd = 3, print.auc = TRUE, print.auc.x = 0.6, print.auc.y = 0.2, grid = TRUE, legacy.axes = TRUE)
+legend("bottomright", legend = paste0("AUC = ", round(auc(roc_obj), 3)), col = palette[4], lwd = 3, cex = 1.1, bty = "n")
+dev.off()
+tiff("LASSO_ROC.tif", width = 8, height = 8, units = "in", res = 300, compression = "lzw")
+plot(roc_obj, main = "ROC Curve of LASSO Risk Signature", col = palette[4], lwd = 3, print.auc = TRUE, print.auc.x = 0.6, print.auc.y = 0.2, grid = TRUE, legacy.axes = TRUE)
+legend("bottomright", legend = paste0("AUC = ", round(auc(roc_obj), 3)), col = palette[4], lwd = 3, cex = 1.1, bty = "n")
+dev.off()
+
+# Coefficient magnitude barplot
+gene_order <- order(abs(selected_genes), decreasing = TRUE)
+pdf("LASSO_Gene_Coefficient.pdf", width = 8, height = 8)
+barplot(selected_genes[gene_order],
+        horiz = TRUE,
+        las = 1,
+        col = ifelse(selected_genes[gene_order] > 0, palette[2], palette[4]),
+        border = NA,
+        main = "LASSO Selected Gene Coefficients",
+        xlab = "Coefficient Value",
+        cex.names = 0.7,
+        space = 0.5)
+abline(v = 0, col = "gray30")
+legend("topright", legend = c("Positive Correlation with NonpCR", "Negative Correlation with NonpCR"), fill = palette[c(2,4)], cex = 0.9, bty = "n")
+dev.off()
+tiff("LASSO_Gene_Coefficient.tif", width = 8, height = 8, units = "in", res = 300, compression = "lzw")
+barplot(selected_genes[gene_order],
+        horiz = TRUE,
+        las = 1,
+        col = ifelse(selected_genes[gene_order] > 0, palette[2], palette[4]),
+        border = NA,
+        main = "LASSO Selected Gene Coefficients",
+        xlab = "Coefficient Value",
+        cex.names = 0.7,
+        space = 0.5)
+abline(v = 0, col = "gray30")
+legend("topright", legend = c("Positive Correlation with NonpCR", "Negative Correlation with NonpCR"), fill = palette[c(2,4)], cex = 0.9, bty = "n")
+dev.off()
+
+# Export signature gene coefficient table
+selected_genes_df <- data.frame(
+  Gene = names(selected_genes),
+  Coefficient = selected_genes,
+  row.names = NULL
+)
+write.csv(selected_genes_df[order(-abs(selected_genes_df$Coefficient)), ], "LASSO_signature_coef.csv", row.names = FALSE)
+
+# Model summary output
+cat("==== LASSO Model Summary ====\n")
+cat("- Optimal lambda (max AUC):", cv_fit$lambda.min, "\n")
+cat("- 1-SE rule lambda:", cv_fit$lambda.1se, "\n")
+cat("- Final signature gene count:", length(selected_genes), "\n")
+cat("- Training cohort AUC:", round(auc(roc_obj), 3), "\n")
+cat("- Risk score table saved: GSE25066-LASSO2.csv\n\n")
+
+# Save trained model object
+saveRDS(cv_fit, file = "lasso_trained_model.rds")
