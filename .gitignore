@@ -1,0 +1,17 @@
+.Rhistory
+.RData
+.Rproj.user/
+*.rds
+*.RDS
+*.rda
+*.RData
+*.pdf
+*.tif
+*.tiff
+*.png
+*.jpg
+*.jpeg
+*.csv
+*.tsv
+*.txt~
+!scripts/*.txt
