@@ -1,0 +1,135 @@
+# 01_GEO_Microarray_Preprocess/GSE25066_process.R
+```r
+# Clear global environment
+rm(list = ls())
+
+# Load required libraries
+library(tidyverse)
+library(data.table)
+library(GEOquery)
+library(limma)
+library(ade4)
+library(factoextra)
+library(magrittr)
+library(ggplot2)
+library(ggrepel)
+
+#===================== 1. Download & load GSE25066 microarray data =====================
+Sys.setenv("VROOM_CONNECTION_SIZE"=99999999)
+GSEs <- c("GSE25066")
+GSE_sm <- paste0(GSEs, "_sm")
+GSE_expr <- paste0(GSEs, "_expr")
+GSE_pd <- paste0(GSEs, "_pd")
+
+# Download series matrix
+assign(GSE_sm[1], getGEO(GSE = GSEs[1], filename = paste0(GSEs[1], "_series_matrix.txt.gz"), getGPL = F))
+# Extract expression matrix and sample metadata
+assign(GSE_expr[1], exprs(get(GSE_sm[1])))
+assign(GSE_pd[1], pData(get(GSE_sm[1])))
+
+# Boxplot before normalization
+pdf("Before_norm_boxplots_all.PDF", 8, 8)
+boxplot(get(GSE_expr[1]), las=2, outline=FALSE, main = paste0("Boxplot for ", GSEs[1]))
+dev.off()
+
+# limma between-array normalization
+GSE25066_norm <- as.data.frame(normalizeBetweenArrays(as.matrix(GSE25066_expr)))
+pdf("After_norm_boxplots_25066.PDF", 8, 8)
+boxplot(GSE25066_norm, las=2, outline=FALSE, main = "GSE25066")
+dev.off()
+
+# Export raw sample grouping file
+write.csv(GSE25066_pd, "GSE25066_group.csv")
+
+# Probe ID to gene symbol annotation (GPL96)
+ann_25066 <- fread('GPL96.txt') %>% select(ID,`Gene Symbol`)
+colnames(ann_25066) <- c('id','symbol')
+ann_25066$id <- as.character(ann_25066$id)
+GSE25066_norm$id <- rownames(GSE25066_norm)
+GSE25066_ann <- inner_join(GSE25066_norm,ann_25066,by = 'id') %>% select(id,symbol,everything())
+GSE25066_ann <- GSE25066_ann[,2:ncol(GSE25066_ann)]
+# Remove duplicated gene symbols, retain single entry
+GSE25066_ann <- GSE25066_ann[!duplicated(GSE25066_ann$symbol),]
+write.csv(GSE25066_ann,"GSE25066_symbol.csv",row=F)
+
+# Average expression for duplicated gene symbols
+gene_matrix <- read.csv("GSE25066_symbol.csv", header = TRUE, check.names = FALSE)
+colnames(gene_matrix)[1] <- "Gene"
+gene_matrix <- gene_matrix %>% mutate(Gene = toupper(Gene),Gene = trimws(Gene))
+gene_matrix_avg <- gene_matrix %>% group_by(Gene) %>% summarise(across(everything(), ~ mean(.x, na.rm = TRUE)))
+gene_matrix_avg <- gene_matrix_avg %>% column_to_rownames(var = "Gene")
+write.csv(gene_matrix_avg, "GSE25066_symbol_avg.csv", row.names = TRUE, quote = FALSE)
+
+# Filter samples matched with grouping info
+group_info <- read.csv("GSE25066_group.csv")
+samples_in_group <- group_info[,1]
+gene_matrix <- read.csv("GSE25066_symbol_avg.csv", row.names = 1)
+matched_gene_matrix <- gene_matrix[, colnames(gene_matrix) %in% samples_in_group]
+# Reorder columns following sample order in group file
+gene_matrix_reordered <- matched_gene_matrix[,samples_in_group]
+write.table(gene_matrix_reordered, "GSE25066_symbol_avg_reordered.txt", sep = "\t", row.names = TRUE, quote = FALSE)
+
+#===================== 2. PCA analysis =====================
+d <- as.matrix(read.table("GSE25066_symbol_avg_reordered.txt", head = TRUE, sep = "\t"))
+group <- read.table("GSE25066_group.txt", head = TRUE)
+dp <- dudi.pca(t(d), scale = FALSE, center = TRUE, scannf = FALSE, nf = 2)
+pdf("pca_plot.pdf",8,8)
+s.class(dp$li, as.factor(group$group), col = 1:15, cpoint = 0.5, cellipse = 1, grid = FALSE, origin = c(0, 0), addaxes = TRUE, clabel = 0, cstar = 1, pch = 16, axesell = FALSE, csub = 0)
+# Calculate variance explained
+eigenvalues <- dp$eig
+total_variance <- sum(eigenvalues)
+pc1_percentage <- (eigenvalues[1] / total_variance) * 100
+pc2_percentage <- (eigenvalues[2] / total_variance) * 100
+cat(paste0("PC1 variance explained: ", pc1_percentage, "%\nPC2 variance explained: ", pc2_percentage, "%\n"))
+dev.off()
+
+#===================== 3. Limma differential expression: pCR vs NonpCR =====================
+expr <- read.table("GSE25066_symbol_avg_reordered.txt", header = TRUE, row.names = 1, sep = "\t")
+group <- read.table("GSE25066_group.txt", header = TRUE,row.names = 1)
+identical(rownames(group),colnames(expr))
+save(expr,group,file="GSE25066.rda")
+rm(list=ls())
+load("GSE25066.rda")
+# Set factor reference level
+group_list <- factor(group$group, levels = c("pCR","NonpCR"))
+design=model.matrix(~group_list)
+fit=lmFit(expr,design )
+fit2=eBayes(fit)
+dem=topTable(fit2,coef = 2,number = Inf,adjust.method = "BH")
+GSE25066_DEG=na.omit(dem)
+write.table(GSE25066_DEG,"GSE25066_diff.txt",sep = "\t",row.names = T,col.names = NA,quote = F)
+
+#===================== 4. Volcano plot visualization =====================
+data <- fread('GSE25066_diff.txt')
+log2FCfilter = 0.585
+colnames(data)[2] <- 'log2FC'
+colnames(data)[1] <- 'gene'
+# Filter threshold: adj.P.Val <0.05 & |log2FC|>0.585
+index = data$adj.P.Val <0.05 & abs(data$log2FC) > log2FCfilter
+data$group <- 0
+data$group[index & data$log2FC>0] = 1
+data$group[index & data$log2FC<0] = -1
+data$group <- factor(data$group,levels = c(1,0,-1),labels =c("UP","NOT","DOWN") )
+data <- as.data.frame(data)
+rownames(data) <- data$gene
+data <- data[, -which(colnames(data) == "gene"), drop = FALSE]
+write.table(data,"GSE25066_diff1.txt",sep = "\t",row.names = T,col.names = NA,quote = F)
+data$gene <- rownames(data)
+
+# Draw volcano plot
+p <- ggplot(data, aes(x = log2FC, y = -log10(adj.P.Val), color = group)) +
+  geom_point(alpha = 0.8, size = 1.2) +
+  scale_color_manual(values =  c("#E64B35FF", "grey50", "#4DBBD5FF"),labels = c("UP", "NOT", "DOWN")) +
+  labs(x = "log2 (fold change)", y = "-log10 (adjusted P-value)") +
+  geom_hline(yintercept = -log10(0.05), lty = 4, lwd = 0.6, alpha = 0.8) +
+  geom_vline(xintercept = c(-log2FCfilter, log2FCfilter), lty = 4, lwd = 0.6, alpha = 0.8) +
+  theme_bw() + theme(panel.border = element_blank(),panel.grid.major = element_blank(),panel.grid.minor = element_blank(),axis.line = element_line(colour = "black"),legend.position = "top")
+
+# Save high-res figure
+pdf("volcano_plot.pdf", width = 8, height = 8)
+print(p)
+dev.off()
+tiff("volcano_plot.tiff", width = 8, height = 8, units = "in", res = 300, compression = "lzw")
+print(p)
+dev.off()
+```
