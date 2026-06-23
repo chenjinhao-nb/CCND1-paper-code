@@ -1,0 +1,86 @@
+# Load single cell packages
+library(Seurat)
+library(harmony)
+library(tidyverse)
+library(patchwork)
+set.seed(123)
+
+# Load merged raw Seurat object
+seu_combined <- readRDS("seu_combined.rds")
+
+#==================== QC filtering ====================
+# Pre-filter QC violin plot
+qc_plots <- VlnPlot(seu_combined, 
+                    features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), 
+                    ncol = 3, group.by = "orig.ident", layer = "counts", pt.size = 0)
+ggsave("qc_before_filter.pdf", qc_plots, width = 12, height = 6)
+
+# Filter low-quality cells
+seu_combined <- subset(seu_combined,
+                       subset = nFeature_RNA > 200 & 
+                         nFeature_RNA < 6000 & 
+                         percent.mt < 10)
+
+# Post-filter QC plot
+qc_plots_after <- VlnPlot(seu_combined, 
+                          features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), 
+                          ncol = 3, group.by = "orig.ident", layer = "counts", pt.size = 0)
+ggsave("qc_after_filter.pdf", qc_plots_after, width = 12, height = 6)
+
+#==================== Normalization & Variable Gene ====================
+seu_combined <- NormalizeData(seu_combined)
+seu_combined <- FindVariableFeatures(seu_combined, selection.method = "vst", nfeatures = 3000)
+# Scale data, regress mitochondrial percentage
+seu_combined <- ScaleData(seu_combined, vars.to.regress = "percent.mt")
+saveRDS(seu_combined, file = "seu_combined_before_harmony.rds")
+
+#==================== PCA & UMAP before batch correction ====================
+seu_combined <- RunPCA(seu_combined, npcs = 50, verbose = FALSE)
+seu_combined <- RunUMAP(seu_combined, reduction = "pca", dims = 1:30, reduction.name = "umap_pca")
+p0 <- DimPlot(seu_combined, reduction = "umap_pca", group.by = "orig.ident")
+ggsave("umap_pre_harmony.pdf", p0, width = 8, height = 8)
+
+# Subset pre-NAC treatment samples only
+seu_pre_treat <- subset(seu_combined, 
+                      subset = treatment_stage == "Pre-treatment" & 
+                        response %in% c("pCR", "NonpCR"))
+p0_1 <- DimPlot(seu_pre_treat, reduction = "umap_pca", group.by = "sample_id") +
+  ggtitle("Pre-NAC samples (Before Harmony Correction)")
+ggsave("umap_pre_treat_before_harmony.pdf", p0_1, width = 8, height = 8)
+
+#==================== Harmony batch correction ====================
+seu_combined <- RunHarmony(seu_combined, group.by.vars = "orig.ident")
+seu_combined <- RunUMAP(seu_combined, reduction = "harmony", dims = 1:30, reduction.name = "umap_harmony")
+p00 <- DimPlot(seu_combined, reduction = "umap_harmony", group.by = "orig.ident")
+ggsave("umap_post_harmony.pdf", p00, width = 8, height = 8)
+
+# Subset pre-treatment after correction
+seu_pre_treat_corrected <- subset(seu_combined, 
+                       subset = treatment_stage == "Pre-treatment" & response %in% c("pCR", "NonpCR"))
+p0_2 <- DimPlot(seu_pre_treat_corrected, reduction = "umap_harmony", group.by = "sample_id") +
+  ggtitle("Pre-NAC samples (After Harmony Correction)")
+ggsave("umap_pre_treat_after_harmony.pdf", p0_2, width = 8, height = 8)
+
+#==================== Clustering ====================
+seu_combined <- FindNeighbors(seu_combined, reduction = "harmony", dims = 1:30)
+seu_combined <- FindClusters(seu_combined, resolution = 0.5)
+# Final UMAP based on harmony embedding
+seu_combined <- RunUMAP(seu_combined, reduction = "harmony", dims = 1:30, reduction.name = "umap")
+
+# Multi-panel UMAP visualization
+p1 <- DimPlot(seu_combined, reduction = "umap", group.by = "seurat_clusters", label = TRUE)
+p2 <- DimPlot(seu_combined, reduction = "umap", group.by = "orig.ident")
+p3 <- DimPlot(seu_combined, reduction = "umap", group.by = "treatment_stage")
+p4 <- DimPlot(seu_combined, reduction = "umap", group.by = "response")
+combined_plot <- (p1 + p2) / (p3 + p4)
+ggsave("umap_overview.pdf", combined_plot, width = 12, height = 10)
+
+# Separate single plots
+ggsave("umap_cluster.pdf", p1, width = 8, height = 8)
+ggsave("umap_batch.pdf", p2, width = 8, height = 8)
+ggsave("umap_treatment.pdf", p3, width = 8, height = 8)
+ggsave("umap_response.pdf", p4, width = 8, height = 8)
+
+# Save harmonized full object
+saveRDS(seu_combined, file = "seu_combined_harmony.rds")
+sessionInfo()
