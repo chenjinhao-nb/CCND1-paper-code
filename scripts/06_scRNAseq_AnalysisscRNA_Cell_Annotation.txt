@@ -1,0 +1,92 @@
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+
+# Load harmony-corrected object
+seu_combined <- readRDS("seu_combined_harmony.rds")
+
+# Canonical cell type marker genes for breast tissue
+breast_cell_markers <- list(
+  "Epithelial_cells" = c("EPCAM", "KRT8", "KRT18"),
+  "Endothelial_cells" = c("VWF", "PLVAP", "PECAM1"),
+  "Pericytes" = c("RGS5", "ACTA2", "MCAM"),
+  "Fibroblasts" = c("COL1A1", "DCN", "LUM"),
+  "Myeloid_cells" = c("LYZ", "CD68", "CD14"),
+  "T_cells" = c("CD3D", "CD3E", "CD2"),
+  "B_cells" = c("MS4A1", "CD79A", "CD79B"),
+  "Plasma_cells" = c("IGHG1", "JCHAIN", "IGKC"),
+  "NK_cells" = c("KLRD1", "GNLY", "NKG7"),
+  "Mast_cells" = c("TPSAB1", "TPSB2", "KIT"),
+  "Proliferating_cells" = c("MKI67", "PCNA", "TOP2A")
+)
+
+# Marker dotplot across clusters
+p_dot <- DotPlot(seu_combined, features = unique(unlist(breast_cell_markers)), 
+                 assay = "RNA", cluster.idents = TRUE) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ggtitle("Canonical Marker Expression Across Clusters")
+ggsave("cell_marker_dotplot.pdf", p_dot, width = 12, height = 8)
+
+# Manual cluster to cell type mapping
+cluster_celltype_manual <- c(
+  "10" = "B_cells",
+  "16" = "Mast_cells",
+  "17" = "Epithelial_cells",
+  "18" = "Plasma_cells",
+  "11" = "Epithelial_cells",
+  "8" = "Mast_cells",
+  "5" = "Epithelial_cells",
+  "1" = "Epithelial_cells",
+  "4" = "Epithelial_cells",
+  "14" = "Epithelial_cells",
+  "2" = "Myeloid_cells",
+  "19" = "Myeloid_cells",
+  "21" = "Plasma_cells",
+  "7" = "T_cells",
+  "0" = "T_cells",
+  "3" = "T_cells",
+  "13" = "NK_cells",
+  "15" = "Proliferating_cells",
+  "20" = "Proliferating_cells",
+  "9" = "Endothelial_cells",
+  "6" = "Fibroblasts",
+  "12" = "Pericytes"
+)
+
+# Add celltype metadata column
+seu_combined[['celltype']] <- unname(cluster_celltype_manual[as.character(seu_combined$seurat_clusters)])
+
+# UMAP colored by annotated cell types
+p_umap <- DimPlot(seu_combined, reduction = 'umap', group.by = 'celltype', 
+                  label = TRUE, label.size = 3, pt.size = 0.1, repel = TRUE) +
+  ggtitle("UMAP Plot Annotated by Cell Type") +
+  theme(plot.title = element_text(hjust = 0.5))
+ggsave("umap_celltype.pdf", p_umap, width = 10, height = 8)
+
+# Cell type count statistics
+celltype_counts <- table(seu_combined$celltype)
+print("Cell type composition counts:")
+print(celltype_counts)
+write.csv(as.data.frame(celltype_counts), "cell_type_counts.csv", row.names = FALSE)
+
+# Cell proportion pie chart
+celltype_df <- as.data.frame(celltype_counts)
+names(celltype_df) <- c("CellType", "CellCount")
+celltype_df$Percentage <- round(celltype_df$CellCount / sum(celltype_df$CellCount) * 100, 1)
+p_pie <- ggplot(celltype_df, aes(x = "", y = CellCount, fill = CellType)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  geom_text(aes(label = paste0(Percentage, "%")), position = position_stack(vjust = 0.5), size = 3) +
+  labs(title = Global Cell Type Composition)
+ggsave("cell_type_pie.pdf", p_pie, width = 8, height = 6)
+
+# Marker dotplot grouped by annotated cell type
+p_dot_celltype <- DotPlot(seu_combined, features = unique(unlist(breast_cell_markers)), 
+                          assay = "RNA", group.by = 'celltype') +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ggtitle("Marker Expression Grouped by Cell Type")
+ggsave("marker_by_celltype.pdf", p_dot_celltype, width = 12, height = 8)
+
+# Save annotated Seurat object
+saveRDS(seu_combined, file = "seu_combined_harmony_annotated.rds")
