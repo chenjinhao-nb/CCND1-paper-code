@@ -1,0 +1,160 @@
+# Load metabolomics analysis packages
+library(ropls)
+library(ggplot2)
+library(dplyr)
+library(impute)
+library(MetaboAnalystR)
+
+#==================== OPLS-DA Multivariate Analysis ====================
+# Metabolite intensity matrix (row=metabolite, column=sample)
+data_matrix <- read.csv("pCR-NonpCR.csv", header = TRUE, row.names = 1)
+# Sample grouping file
+group_info <- read.csv("group.csv", header = FALSE, sep = ",")
+colnames(group_info) <- c("Sample", "Group")
+group <- as.factor(group_info$Group)
+
+# Transpose matrix: row=sample, column=metabolite
+data_matrix <- t(data_matrix)
+# Reorder samples to match grouping table
+data_matrix <- data_matrix[group_info$Sample, ]
+
+# KNN impute missing metabolite values
+if (any(is.na(data_matrix))) {
+  data_matrix_imputed <- impute::impute.knn(as.matrix(data_matrix))$data
+  data_matrix <- as.data.frame(data_matrix_imputed)
+}
+
+# OPLS-DA model fitting
+oplsda_result <- opls(
+  x = data_matrix,
+  y = group,
+  predI = 1,
+  orthoI = NA,
+  scaleC = "standard"
+)
+
+# Export full model summary
+sink("OPLSDA_model_summary.txt")
+print(oplsda_result)
+sink()
+
+# Sample score scatter plot
+tp_scores <- getScoreMN(oplsda_result)
+to_scores <- getOrthoScoreMN(oplsda_result)[, 1]
+df_scores <- data.frame(
+  Tp = tp_scores[, 1],
+  To = to_scores,
+  Group = group,
+  Sample = rownames(data_matrix)
+)
+score_plot <- ggplot(df_scores, aes(x = Tp, y = To, color = Group)) +
+  geom_point(size = 3) +
+  stat_ellipse(level = 0.95) +
+  geom_text(aes(label = Sample), hjust = 0.5, vjust = -1, size = 3, show.legend = FALSE) +
+  labs(x = "Predicted Component T-score", y = "Orthogonal Component T-score") +
+  theme_bw()
+ggsave("/mnt/oplsda_score_plot.png", score_plot, width = 8, height = 6)
+
+# Loading bar plot (VIP>1 metabolites)
+loadings <- getLoadingMN(oplsda_result)[, 1]
+vip_values <- getVipVn(oplsda_result)
+df_loadings <- data.frame(
+  Metabolite = colnames(data_matrix),
+  Loading = loadings,
+  VIP = vip_values
+) %>% arrange(desc(abs(Loading)))
+sig_loadings <- df_loadings %>% filter(VIP > 1)
+loading_plot <- ggplot(sig_loadings, aes(x = Loading, y = reorder(Metabolite))) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(x = Loading Coefficient, y = Metabolite") +
+  theme_minimal()
+ggsave("/mnt/oplsda_loading_plot.png", loading_plot, width = 10, height = 8)
+
+# S-plot for biomarker screening
+splot_data <- data.frame(
+  p1 = getLoadingMN(oplsda_result)[, 1],
+  pcorr1 = getPcorrMN(oplsda_result)[, 1],
+  VIP = vip_values,
+  Metabolite = colnames(data_matrix)
+)
+s_plot <- ggplot(splot_data, aes(x = p1, y = pcorr1, color = VIP > 1)) +
+  geom_point() +
+  scale_color_manual(values = c("grey", "red")) +
+  geom_text(data = subset(splot_data, VIP > 1),
+            aes(label = Metabolite),
+            hjust = 0.5, vjust = -0.8, size = 3) +
+  labs(x = p[1], y = p(corr)[1]) +
+  theme_bw()
+ggsave("/mnt/oplsda_splot.png", s_plot, width = 8, height = 6)
+
+# Permutation validation plot
+perm_result <- permutation(oplsda_result, permI = 200)
+pdf("/mnt/oplsda_permutation_validation.pdf")
+plot(perm_result)
+dev.off()
+
+# Export VIP table
+write.csv(df_loadings, "/mnt/oplsda_vip_values.csv", row.names = FALSE)
+
+#==================== MetaboAnalystR Univariate Analysis ====================
+# Prepare metadata
+meta_data <- read.csv("/mnt/group.csv", header = FALSE, sep = ",")
+colnames(meta_data) <- c("Sample", "Group")
+write.csv(meta_data, "/mnt/metadata.csv", row.names = FALSE)
+
+# Initialize metabolomics object
+mSet <- InitDataObjects("pktable", "stat", FALSE)
+mSet <- Read.TextData(mSet, "/mnt/pCR-NonpCR.csv", "rowu", "disc")
+mSet <- ReadMetaData(mSet, "/mnt/metadata")
+
+# Data QC & preprocessing
+mSet <- SanityCheckData(mSet)
+mSet <- ReplaceMin(mSet)
+# Multi-step normalization
+mSet <- Normalization(mSet, "SumNorm", "NULL", "NULL")
+mSet <- Normalization(mSet, "NULL", "LogNorm", "NULL")
+mSet <- Normalization(mSet, "NULL", "NULL", "Pareto")
+
+# Normalization distribution plots
+mSet <- PlotNormSummary(mSet, "/mnt/norm_summary", "png", dpi = 300)
+mSet <- PlotSampleNormSummary(mSet, "/mnt/sample_norm_summary", "png", dpi = 300)
+
+# Two-group T-test (FDR adjusted)
+mSet <- Ttests.Anal(
+  mSet,
+  nonpar = FALSE,
+  threshp = 0.05,
+  paired = FALSE,
+  equal.var = TRUE,
+  pval.type = "fdr"
+)
+
+# Metabolite volcano plot
+mSet <- Volcano.Anal(
+  mSet,
+  paired = FALSE,
+  fcthresh = 1.5,
+  pthresh = 0.05,
+  nonLog = FALSE,
+  threshp = 0.1,
+  equalVar = TRUE,
+  pval.type = "fdr"
+)
+mSet <- PlotVolcano(mSet, "/mnt/volcano_plot", "png", dpi = 300, width = 9)
+
+# Differentially expressed metabolite heatmap
+mSet <- PlotHeatMap(
+  mSet,
+  "/mnt/metabolite_heatmap",
+  "png",
+  dpi = 300,
+  dataOpt = "norm",
+  scaleOpt = "row",
+  smplDist = "euclidean",
+  clstDist = "ward.D",
+  palette = "bwm",
+  viewOpt = "overview"
+)
+
+# Save normalized metabolome matrix
+mSet <- SaveTransformedData(mSet)
