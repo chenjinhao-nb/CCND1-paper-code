@@ -1,0 +1,25 @@
+zip_path	size_bytes	md5	github_action	note
+1/01_limma_DEA.R.txt	705	60d804c02325717844448983e339acec	uploaded	script file from organized zip
+1/02_volcano_plot.R.txt	1613	76ba6ad5285a249bf958bb49ce91fcf7	uploaded	script file from organized zip
+1/03_DEG_heatmap.R.txt	1573	cdb0889bdd35a750ac661438efec1b75	uploaded	script file from organized zip
+1/GSE25066_group4.txt	8495	c4554f9cb630380fed219d57229b9da5	not_uploaded	lightweight metadata listed by checksum; upload separately if full sample table is desired in GitHub
+1/GSE25066_symbol_avg_filtered_ordered.csv	108971027	9931251aaab2a30366c9ca6cca75b371	not_uploaded	large data file; keep outside GitHub and provide external repository/accession
+2/04_venn_intersection.R.txt	0	d41d8cd98f00b204e9800998ecf8427e	uploaded	script file from organized zip
+2/GSE20194_diff1.txt	1578857	38a237918d4a4773b03f36635411fb89	not_uploaded	analysis input/intermediate file; listed for reproducibility but not committed
+2/GSE25066_diff1.txt	1585533	3c390804d1ce665580dd9b184a5bc6b9	not_uploaded	analysis input/intermediate file; listed for reproducibility but not committed
+2/GSE32646_diff1.txt	2747164	7165753c45f3af3458eda83ea6166430	not_uploaded	analysis input/intermediate file; listed for reproducibility but not committed
+2/total.txt	8287	342e405a75b0cee9c338622603365df1	not_uploaded	intersection metadata listed by checksum; upload separately if full gene table is desired in GitHub
+4/05_lasso_risk_model.R.txt	6644	f432d670e8edfa3353e3a1128ee58c97	uploaded	script file from organized zip
+4/GSE25066-LASSO1.csv	298798	b8aff0221bfc6e436284db27a9625134	not_uploaded	analysis input/intermediate file; listed for reproducibility but not committed
+5/06_kegg_enrichment.R.txt	0	d41d8cd98f00b204e9800998ecf8427e	uploaded	script file from organized zip
+5/07_gsea_hallmark_analysis.R.txt	4603	a06803d1fabe66263cae1262e78bd8b2	uploaded	script file from organized zip
+5/Diff-genes1.csv	1535	029b170ad41f2aa2cb0847daeca7f7b9	uploaded	lightweight metadata/reference file from organized zip
+5/GSE25066_diff.txt	1396891	9398b152d463847dd3ba448c34c5f9a0	not_uploaded	analysis input/intermediate file; listed for reproducibility but not committed
+5/h.all.v2024.1.Hs.symbols.gmt	48690	d3606c325b9862bf3ea7991c2c2bf7d7	not_uploaded	MSigDB reference gene set; list checksum here, download from MSigDB instead of redistributing
+6/08_scrna_merge_seurat.R..txt	1779	18273b6610eb9266a3718b2e00245154	uploaded	script file from organized zip
+6/09_scrna_qc_harmony_cluster.R.txt	3614	9dce33e5a698dd8d23a3b503c527088a	uploaded	script file from organized zip
+6/10_scrna_celltype_annotation.R.txt	4438	a565cdd70c862493a13a97784447cbf5	uploaded	script file from organized zip
+6/11_scrna_infercnv_prepare.R.txt	5916	61825264e9e18e075581d7345f23ce1d	uploaded	script file from organized zip
+6/12_scrna_infercnv_analysis_function_communication.R.txt	16571	ddd831e416fe9aab707dbd4663002870	uploaded	script file from organized zip
+6/hg38_gencode_v27.txt	1848802	0c08b487706b2b8362470570d5b9eeb8	not_uploaded	analysis input/intermediate file; listed for reproducibility but not committed
+6/seu_combined.rds	389471078	2f3018a8138b7176b322606837430400	not_uploaded	large data file; keep outside GitHub and provide external repository/accession
