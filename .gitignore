@@ -1,17 +1,31 @@
 .Rhistory
 .RData
 .Rproj.user/
+
+# R and analysis data objects
 *.rds
 *.RDS
 *.rda
 *.RData
+
+# Large tabular/intermediate data are listed in metadata/data_manifest.tsv.
+*.csv
+*.tsv
+*.txt
+*.mtx
+*.h5
+*.h5ad
+
+# Plot/output artifacts
 *.pdf
 *.tif
 *.tiff
 *.png
 *.jpg
 *.jpeg
-*.csv
-*.tsv
-*.txt~
-!scripts/*.txt
+
+# Keep source code and curated lightweight metadata.
+!scripts/*.R
+!metadata/*.txt
+!metadata/*.csv
+!metadata/*.tsv
