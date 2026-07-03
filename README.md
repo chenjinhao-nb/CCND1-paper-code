@@ -5,7 +5,7 @@ This repository contains the organized R scripts and lightweight metadata used f
 ## Repository Layout
 
 - `scripts/`: analysis scripts reorganized from `新整理代码.zip`.
-- `metadata/`: lightweight sample/group metadata, gene-list metadata, and a checksum manifest for files in the source zip.
+- `metadata/`: curated small metadata and a checksum manifest for files in the source zip.
 
 Large matrices, Seurat objects, and intermediate result tables are intentionally not committed to GitHub. See `metadata/data_manifest.tsv` for file sizes, MD5 checksums, and upload decisions.
 
@@ -30,17 +30,18 @@ Large matrices, Seurat objects, and intermediate result tables are intentionally
 
 | File | Description |
 | --- | --- |
-| `metadata/GSE25066_group4.txt` | GSE25066 sample grouping metadata from the source zip. |
-| `metadata/intersection_total.txt` | Gene/intersection metadata from the source zip. |
-| `metadata/Diff-genes1.csv` | Differential gene list used by downstream enrichment/GSEA steps. |
+| `metadata/Diff-genes1.csv` | Small differential gene list used by downstream enrichment/GSEA steps. |
 | `metadata/data_manifest.tsv` | Full manifest of files in the source zip, including MD5 checksums and upload decisions. |
+
+The source zip also contains `1/GSE25066_group4.txt` and `2/total.txt`; these are recorded with checksums in `metadata/data_manifest.tsv` but are not currently committed as full tables.
 
 ## Data Availability Notes
 
-The following files were not uploaded because they are large data objects, analysis intermediates, or externally licensed reference resources:
+The following files were not uploaded because they are large data objects, analysis intermediates, full metadata tables, or externally licensed reference resources:
 
 - `1/GSE25066_symbol_avg_filtered_ordered.csv` (about 109 MB)
 - `6/seu_combined.rds` (about 389 MB)
+- `1/GSE25066_group4.txt` and `2/total.txt`, listed by checksum in the manifest
 - intermediate DEG/LASSO/inferCNV input tables listed in `metadata/data_manifest.tsv`
 - `5/h.all.v2024.1.Hs.symbols.gmt`, which should be downloaded from MSigDB rather than redistributed here
 
